@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: testonline
+      POSTGRES_USER: testonline
+      POSTGRES_PASSWORD: testonline
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testonline -d testonline"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  blob:
+    image: mcr.microsoft.com/azure-storage/azurite
+    environment:
+      AZURITE_ACCOUNTS: "${AZURITE_ACCOUNTS}"
+    command: azurite-blob --blobHost 0.0.0.0 --location /data --debug /data/debug.log --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+    volumes:
+      - blob_data:/data
+
+  faceauth:
+    build:
+      context: ./face_service
+      dockerfile: Dockerfile
+    environment:
+      FACE_MODEL_NAME: "buffalo_l"
+      FACE_MATCH_THRESHOLD: "0.62"
+      FACE_MIN_DET_SCORE: "0.60"
+      FACE_MIN_FACE_RATIO: "0.04"
+      FACE_DET_SIZE: "640"
+      FACE_MODEL_ROOT: "/models"
+      FACE_PROVIDERS: "CPUExecutionProvider"
+    volumes:
+      - face_model_data:/models
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=5).read()"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      DEBUG: "True"
+      SECRET_KEY: "local-dev-secret-key-change-me"
+      JWT_SECRET_KEY: "local-dev-jwt-secret-key-change-me-123456"
+      DB_NAME: testonline
+      DB_USER: testonline
+      DB_PASSWORD: testonline
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+      CORS_ALLOW_ALL_ORIGINS: "True"
+      DEFAULT_FROM_EMAIL: "no-reply@testonline.local"
+      AZURE_BLOB_ACCOUNT_NAME: "devstoreaccount1"
+      AZURE_BLOB_ACCOUNT_KEY: "${AZURE_BLOB_ACCOUNT_KEY}"
+      AZURE_BLOB_CONTAINER: "documentos"
+      AZURE_BLOB_ENDPOINT: "http://blob:10000/devstoreaccount1"
+      AZURE_STORAGE_CONNECTION_STRING: "${AZURE_STORAGE_CONNECTION_STRING}"
+      FACE_SERVICE_URL: "http://faceauth:8010/verify"
+      FACE_SERVICE_TIMEOUT_SECONDS: "20"
+      FACE_SERVICE_STRICT: "True"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      blob:
+        condition: service_started
+      faceauth:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./front_react/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "http://localhost:8000/api"
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  postgres_data:
+  blob_data:
+  face_model_data:
