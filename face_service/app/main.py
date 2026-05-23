@@ -60,7 +60,7 @@ class FaceVerifier:
     def _extract_face(self, data_url):
         frame = self._decode(data_url)
         app = self.ensure_loaded()
-        faces = app.get(frame)
+        faces = self._detect_faces_with_fallbacks(app, frame)
         if not faces:
             raise ValueError("No se detectó un rostro en la imagen.")
 
@@ -82,6 +82,31 @@ class FaceVerifier:
             "face_ratio": round(area_ratio, 4),
             "bbox": [round(value, 2) for value in bbox],
         }
+
+    def _detect_faces_with_fallbacks(self, app, frame):
+        attempts = [frame]
+
+        padded = cv2.copyMakeBorder(frame, 80, 80, 80, 80, cv2.BORDER_REPLICATE)
+        attempts.append(padded)
+
+        enlarged = cv2.resize(frame, None, fx=1.35, fy=1.35, interpolation=cv2.INTER_CUBIC)
+        attempts.append(enlarged)
+
+        height, width = frame.shape[:2]
+        side = min(width, height)
+        square_margin = int(side * 0.04)
+        square_side = max(side - (square_margin * 2), 1)
+        square_x = max((width - square_side) // 2, 0)
+        square_y = max((height - square_side) // 2, 0)
+        square_crop = frame[square_y:square_y + square_side, square_x:square_x + square_side]
+        if square_crop.size:
+            attempts.append(cv2.resize(square_crop, (width, height), interpolation=cv2.INTER_CUBIC))
+
+        for candidate in attempts:
+            faces = app.get(candidate)
+            if faces:
+                return faces
+        return []
 
     def verify(self, foto_registrada, foto_actual):
         registrada = self._extract_face(foto_registrada)

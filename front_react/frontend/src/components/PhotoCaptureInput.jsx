@@ -10,8 +10,8 @@ function leerArchivoComoDataUrl(file) {
 }
 
 function capturarZonaGuia(video, quality = 0.92) {
-  const cropWidth = Math.floor(video.videoWidth * 0.72)
-  const cropHeight = Math.floor(video.videoHeight * 0.88)
+  const cropWidth = Math.floor(video.videoWidth * 0.88)
+  const cropHeight = Math.floor(video.videoHeight * 0.94)
   const x = Math.max(Math.floor((video.videoWidth - cropWidth) / 2), 0)
   const y = Math.max(Math.floor((video.videoHeight - cropHeight) / 2), 0)
 
